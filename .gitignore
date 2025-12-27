@@ -1,27 +1,35 @@
-# Python
+# Python virtual environment
+venv/
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
+*.pyc
+*.pyo
+*.pyd
 .Python
 
-# Virtual Environment
-backend/venv/
-venv/
-env/
-ENV/
-
-# SQLite database
+# SQLite database files
 *.db
 *.sqlite
 *.sqlite3
 
-# IDE
+# MacOS files
+.DS_Store
+
+# IDE files
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS
-.DS_Store
-Thumbs.db
+# Android build files
+*.apk
+*.ap_
+*.dex
+.gradle/
+build/
+local.properties
+
+# Backend specific
+backend/venv/
+backend/__pycache__/
+backend/rail_poc.db
+backend/*.db

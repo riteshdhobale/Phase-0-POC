@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:gravity="center_horizontal"
+    android:background="#F5F5F5">
+
+    <!-- App Title -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Railway POC"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:textColor="#1976D2"
+        android:layout_marginBottom="24dp" />
+
+    <!-- User ID Card -->
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:elevation="4dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:id="@+id/tvUserId"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="User ID: Loading..."
+                android:textSize="16sp"
+                android:textColor="#424242" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- Wallet Balance Card -->
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp"
+        android:elevation="4dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:gravity="center">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Wallet Balance"
+                android:textSize="14sp"
+                android:textColor="#757575"
+                android:layout_marginBottom="8dp" />
+
+            <TextView
+                android:id="@+id/tvWalletBalance"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="₹100"
+                android:textSize="48sp"
+                android:textStyle="bold"
+                android:textColor="#4CAF50" />
+
+            <TextView
+                android:id="@+id/tvJourneyStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Journey: NOT ACTIVE"
+                android:textSize="14sp"
+                android:textColor="#FF9800"
+                android:layout_marginTop="8dp" />
+
+            <TextView
+                android:id="@+id/tvLastUpdate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Updated: --"
+                android:textSize="12sp"
+                android:textColor="#BDBDBD"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- Add Funds Button -->
+    <Button
+        android:id="@+id/btnAddFunds"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Add ₹100"
+        android:textSize="18sp"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#4CAF50"
+        android:layout_marginBottom="32dp"
+        android:padding="16dp" />
+
+    <!-- BLE Control Section -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="BLE Broadcasting"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="#424242"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/btnStartBle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Start BLE Advertising"
+        android:textSize="16sp"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#1976D2"
+        android:layout_marginBottom="12dp"
+        android:padding="14dp" />
+
+    <Button
+        android:id="@+id/btnStopBle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Stop BLE Advertising"
+        android:textSize="16sp"
+        android:textColor="#FFFFFF"
+        android:backgroundTint="#D32F2F"
+        android:enabled="false"
+        android:padding="14dp" />
+
+    <!-- Info Text -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Start BLE to broadcast your presence to Raspberry Pi"
+        android:textSize="12sp"
+        android:textColor="#757575"
+        android:gravity="center"
+        android:layout_marginTop="24dp" />
+
+</LinearLayout>
