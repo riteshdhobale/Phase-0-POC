@@ -99,10 +99,10 @@ class BleAdvertisingService : Service() {
             return
         }
         
-        // Create advertising settings
+        // Create advertising settings - MAXIMUM POWER for better detection
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)  // Advertise frequently
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)      // Maximum transmission power
             .setConnectable(false)
             .setTimeout(0) // Advertise indefinitely
             .build()
@@ -112,11 +112,13 @@ class BleAdvertisingService : Service() {
         val payload = "RAIL_USER::$userId"
         val payloadBytes = payload.toByteArray(StandardCharsets.UTF_8)
         
+        // IMPORTANT: Use manufacturer_data instead of service_data for better compatibility
+        // Company ID 0xFFFF is reserved for internal use
         val data = AdvertiseData.Builder()
             .setIncludeDeviceName(false)
-            .setIncludeTxPowerLevel(false)
+            .setIncludeTxPowerLevel(true)  // Include TX power to help with RSSI calculation
             .addServiceUuid(ParcelUuid(SERVICE_UUID))
-            .addServiceData(ParcelUuid(SERVICE_UUID), payloadBytes)
+            .addManufacturerData(0xFFFF, payloadBytes)  // Using manufacturer data (more reliable)
             .build()
 
         // Start advertising

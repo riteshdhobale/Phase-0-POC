@@ -44,60 +44,75 @@ active_scanner = None
 def extract_user_id(device, advertisement_data):
     """
     Extract user_id from BLE advertisement data.
-    Looks for service data containing 'RAIL_USER::<user_id>' payload.
+    Checks manufacturer_data FIRST (Android compatibility), then service_data.
     """
     if DEBUG_MODE:
         print(f"🔍 Checking device: {device.address}")
 
     try:
-        # Check service_data from advertisement_data (not device.metadata)
+        # CHECK MANUFACTURER DATA FIRST (better Android compatibility)
+        if advertisement_data.manufacturer_data:
+            if DEBUG_MODE:
+                print(f"   📦 Manufacturer data found: {list(advertisement_data.manufacturer_data.keys())}")
+            
+            for manufacturer_id, data in advertisement_data.manufacturer_data.items():
+                try:
+                    if DEBUG_MODE:
+                        print(f"   🏭 Manufacturer ID: {hex(manufacturer_id)}")
+                        print(f"   📦 Raw data: {data}")
+                    
+                    payload = data.decode('utf-8', errors='ignore')
+                    
+                    if DEBUG_MODE:
+                        print(f"   📝 Decoded: {payload}")
+                    
+                    if 'RAIL_USER::' in payload:
+                        user_id = payload.split('RAIL_USER::')[1].strip()
+
+                        if DEBUG_MODE:
+                            print(f"   ✅ Found user in manufacturer_data: {user_id[:8]}...")
+
+                        return user_id
+                except Exception as e:
+                    if DEBUG_MODE:
+                        print(f"   ⚠️  Could not decode manufacturer_data: {e}")
+        else:
+            if DEBUG_MODE:
+                print(f"   ⚠️  No manufacturer_data found")
+
+        # Check service_data as fallback
         if advertisement_data.service_data:
+            if DEBUG_MODE:
+                print(f"   🔑 Service data found: {list(advertisement_data.service_data.keys())}")
+            
             for uuid, data in advertisement_data.service_data.items():
                 try:
                     if DEBUG_MODE:
                         print(f"   🔑 Service UUID: {uuid}")
-                        print(f"   📦 Service data: {data}")
+                        print(f"   📦 Raw data: {data}")
 
                     payload = data.decode('utf-8', errors='ignore')
 
                     if DEBUG_MODE:
-                        print(f"   📝 Decoded payload: {payload}")
+                        print(f"   📝 Decoded: {payload}")
 
                     if payload.startswith('RAIL_USER::'):
-                        user_id = payload.replace('RAIL_USER::', '')
+                        user_id = payload.replace('RAIL_USER::', '').strip()
 
                         if DEBUG_MODE:
-                            print(
-                                f"   ✅ Found user in service_data: {user_id[:8]}...")
+                            print(f"   ✅ Found user in service_data: {user_id[:8]}...")
 
                         return user_id
                 except Exception as e:
                     if DEBUG_MODE:
                         print(f"   ⚠️  Could not decode service_data: {e}")
-                    pass
         else:
             if DEBUG_MODE:
                 print(f"   ⚠️  No service_data found")
-
-        # Also check manufacturer data as fallback
-        if advertisement_data.manufacturer_data:
-            for manufacturer_id, data in advertisement_data.manufacturer_data.items():
-                try:
-                    payload = data.decode('utf-8', errors='ignore')
-                    if 'RAIL_USER::' in payload:
-                        user_id = payload.split('RAIL_USER::')[1]
-
-                        if DEBUG_MODE:
-                            print(
-                                f"   ✅ Found user in manufacturer_data: {user_id[:8]}...")
-
-                        return user_id
-                except:
-                    pass
+                
     except Exception as e:
         if DEBUG_MODE:
             print(f"   ❌ Error extracting user_id: {e}")
-        pass
 
     return None
 
@@ -254,11 +269,18 @@ async def scan_ble_devices():
                     status = "✅" if rssi >= RSSI_THRESHOLD else "⚠️"
                     print(
                         f"   {status} Device: {device.name or device.address} | RSSI: {rssi} dBm")
+                    
+                    # Show what data types are available
+                    data_types = []
                     if advertisement_data.service_data:
-                        print(
-                            f"      Service Data UUIDs: {list(advertisement_data.service_data.keys())}")
+                        data_types.append(f"service_data({len(advertisement_data.service_data)})")
+                    if advertisement_data.manufacturer_data:
+                        data_types.append(f"manufacturer_data({len(advertisement_data.manufacturer_data)})")
+                    
+                    if data_types:
+                        print(f"      Data: {', '.join(data_types)}")
                     else:
-                        print(f"      No service_data")
+                        print(f"      No service_data or manufacturer_data")
 
                 # Check RSSI threshold (signal strength)
                 if rssi < RSSI_THRESHOLD:
