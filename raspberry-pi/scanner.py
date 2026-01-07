@@ -53,29 +53,32 @@ def extract_user_id(device, advertisement_data):
         # CHECK MANUFACTURER DATA FIRST (better Android compatibility)
         if advertisement_data.manufacturer_data:
             if DEBUG_MODE:
-                print(f"   📦 Manufacturer data found: {list(advertisement_data.manufacturer_data.keys())}")
-            
+                print(
+                    f"   📦 Manufacturer data found: {list(advertisement_data.manufacturer_data.keys())}")
+
             for manufacturer_id, data in advertisement_data.manufacturer_data.items():
                 try:
                     if DEBUG_MODE:
                         print(f"   🏭 Manufacturer ID: {hex(manufacturer_id)}")
                         print(f"   📦 Raw data: {data}")
-                    
+
                     payload = data.decode('utf-8', errors='ignore')
-                    
+
                     if DEBUG_MODE:
                         print(f"   📝 Decoded: {payload}")
-                    
+
                     if 'RAIL_USER::' in payload:
                         user_id = payload.split('RAIL_USER::')[1].strip()
 
                         if DEBUG_MODE:
-                            print(f"   ✅ Found user in manufacturer_data: {user_id[:8]}...")
+                            print(
+                                f"   ✅ Found user in manufacturer_data: {user_id[:8]}...")
 
                         return user_id
                 except Exception as e:
                     if DEBUG_MODE:
-                        print(f"   ⚠️  Could not decode manufacturer_data: {e}")
+                        print(
+                            f"   ⚠️  Could not decode manufacturer_data: {e}")
         else:
             if DEBUG_MODE:
                 print(f"   ⚠️  No manufacturer_data found")
@@ -83,8 +86,9 @@ def extract_user_id(device, advertisement_data):
         # Check service_data as fallback
         if advertisement_data.service_data:
             if DEBUG_MODE:
-                print(f"   🔑 Service data found: {list(advertisement_data.service_data.keys())}")
-            
+                print(
+                    f"   🔑 Service data found: {list(advertisement_data.service_data.keys())}")
+
             for uuid, data in advertisement_data.service_data.items():
                 try:
                     if DEBUG_MODE:
@@ -100,7 +104,8 @@ def extract_user_id(device, advertisement_data):
                         user_id = payload.replace('RAIL_USER::', '').strip()
 
                         if DEBUG_MODE:
-                            print(f"   ✅ Found user in service_data: {user_id[:8]}...")
+                            print(
+                                f"   ✅ Found user in service_data: {user_id[:8]}...")
 
                         return user_id
                 except Exception as e:
@@ -109,7 +114,7 @@ def extract_user_id(device, advertisement_data):
         else:
             if DEBUG_MODE:
                 print(f"   ⚠️  No service_data found")
-                
+
     except Exception as e:
         if DEBUG_MODE:
             print(f"   ❌ Error extracting user_id: {e}")
@@ -269,14 +274,16 @@ async def scan_ble_devices():
                     status = "✅" if rssi >= RSSI_THRESHOLD else "⚠️"
                     print(
                         f"   {status} Device: {device.name or device.address} | RSSI: {rssi} dBm")
-                    
+
                     # Show what data types are available
                     data_types = []
                     if advertisement_data.service_data:
-                        data_types.append(f"service_data({len(advertisement_data.service_data)})")
+                        data_types.append(
+                            f"service_data({len(advertisement_data.service_data)})")
                     if advertisement_data.manufacturer_data:
-                        data_types.append(f"manufacturer_data({len(advertisement_data.manufacturer_data)})")
-                    
+                        data_types.append(
+                            f"manufacturer_data({len(advertisement_data.manufacturer_data)})")
+
                     if data_types:
                         print(f"      Data: {', '.join(data_types)}")
                     else:
