@@ -60,10 +60,11 @@ class BleAdvertisingService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Railway POC BLE Service",
-                NotificationManager.IMPORTANCE_LOW
+                "Railway BLE Service",
+                NotificationManager.IMPORTANCE_HIGH  // Changed to HIGH for visibility
             ).apply {
                 description = "BLE advertising for railway ticketing"
+                setShowBadge(true)
             }
             
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -78,18 +79,21 @@ class BleAdvertisingService : Service() {
             0,
             notificationIntent,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                PendingIntent.FLAG_IMMUTABLE
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             } else {
-                0
+                PendingIntent.FLAG_UPDATE_CURRENT
             }
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Railway Safety System")
-            .setContentText("Broadcasting User ID via BLE")
+            .setContentTitle("🚂 Railway BLE Active")
+            .setContentText("Broadcasting your ticket - DO NOT close!")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
     }
 
@@ -124,7 +128,13 @@ class BleAdvertisingService : Service() {
         // Start advertising
         try {
             bluetoothLeAdvertiser?.startAdvertising(settings, data, advertiseCallback)
+            android.util.Log.d("BLE_SERVICE", "Started advertising with payload: $payload")
         } catch (e: SecurityException) {
+            android.util.Log.e("BLE_SERVICE", "Security exception: ${e.message}")
+            e.printStackTrace()
+            stopSelf()
+        } catch (e: Exception) {
+            android.util.Log.e("BLE_SERVICE", "Exception: ${e.message}")
             e.printStackTrace()
             stopSelf()
         }
@@ -133,12 +143,20 @@ class BleAdvertisingService : Service() {
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings?) {
             super.onStartSuccess(settingsInEffect)
-            // Advertising started successfully
+            android.util.Log.d("BLE_SERVICE", "✅ BLE Advertising started successfully!")
         }
 
         override fun onStartFailure(errorCode: Int) {
             super.onStartFailure(errorCode)
-            // Advertising failed
+            val errorMsg = when (errorCode) {
+                ADVERTISE_FAILED_DATA_TOO_LARGE -> "Data too large"
+                ADVERTISE_FAILED_TOO_MANY_ADVERTISERS -> "Too many advertisers"
+                ADVERTISE_FAILED_ALREADY_STARTED -> "Already started"
+                ADVERTISE_FAILED_INTERNAL_ERROR -> "Internal error"
+                ADVERTISE_FAILED_FEATURE_UNSUPPORTED -> "Feature unsupported"
+                else -> "Unknown error: $errorCode"
+            }
+            android.util.Log.e("BLE_SERVICE", "❌ BLE Advertising failed: $errorMsg")
             stopSelf()
         }
     }
