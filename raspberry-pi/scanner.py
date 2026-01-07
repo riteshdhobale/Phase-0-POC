@@ -27,6 +27,9 @@ EXIT_DELAY_SECONDS = 10
 # Scan interval (seconds)
 SCAN_INTERVAL = 2
 
+# Debug mode - set to True to see all detected BLE devices
+DEBUG_MODE = True
+
 # Track currently detected users
 # Format: {user_id: {'last_seen': timestamp, 'journey_started': bool}}
 detected_users = {}
@@ -38,30 +41,37 @@ shutdown_flag = False
 active_scanner = None
 
 
-def extract_user_id(device, advertisement_data):
+def extract_user_id(device):
     """
     Extract user_id from BLE advertisement data.
-    Looks for service data or manufacturer data containing 'RAIL_USER::<user_id>' payload.
+    Looks for service data containing 'RAIL_USER::<user_id>' payload.
     """
     try:
-        # Check service data for our custom UUID
-        if advertisement_data.service_data:
-            for uuid, data in advertisement_data.service_data.items():
+        # Check service data for our custom UUID (0000fff0-0000-1000-8000-00805f9b34fb)
+        if device.metadata and 'service_data' in device.metadata:
+            for uuid, data in device.metadata['service_data'].items():
                 try:
+                    # Debug: print what we're receiving
+                    # print(f"DEBUG: Service UUID: {uuid}, Data: {data}")
                     payload = data.decode('utf-8')
                     if payload.startswith('RAIL_USER::'):
                         user_id = payload.replace('RAIL_USER::', '')
+                        print(
+                            f"✅ Found user in service_data: {user_id[:8]}...")
                         return user_id
-                except:
+                except Exception as e:
+                    # print(f"DEBUG: Could not decode service_data: {e}")
                     pass
 
         # Also check manufacturer data as fallback
-        if advertisement_data.manufacturer_data:
-            for manufacturer_id, data in advertisement_data.manufacturer_data.items():
+        if device.metadata and 'manufacturer_data' in device.metadata:
+            for manufacturer_id, data in device.metadata['manufacturer_data'].items():
                 try:
                     payload = data.decode('utf-8')
                     if 'RAIL_USER::' in payload:
                         user_id = payload.split('RAIL_USER::')[1]
+                        print(
+                            f"✅ Found user in manufacturer_data: {user_id[:8]}...")
                         return user_id
                 except:
                     pass
@@ -187,31 +197,49 @@ async def scan_ble_devices():
     print(f"⏱️  Exit delay: {EXIT_DELAY_SECONDS} seconds")
     print(f"🌐 Backend: {BACKEND_URL}")
     print(f"{'='*60}\n")
+    print("📡 Scanning for BLE devices...\n")
+
+    scan_count = 0
 
     while not shutdown_flag:
         try:
-            # Scan for BLE devices with callback approach
-            devices = await BleakScanner.discover(timeout=SCAN_INTERVAL, return_adv=True)
+            # Create scanner instance
+            active_scanner = BleakScanner()
+
+            # Scan for BLE devices with timeout
+            devices = await active_scanner.discover(timeout=SCAN_INTERVAL)
+
+            # Clear scanner reference after scan completes
+            active_scanner = None
 
             current_time = time.time()
             detected_now = set()
 
+            # Debug: show total devices detected
+            if DEBUG_MODE and devices:
+                print(f"\n🔍 Scan found {len(devices)} BLE device(s)")
+
             # Process each detected device
-            # devices is a dict: {address: (BLEDevice, AdvertisementData)}
-            for address, (device, advertisement_data) in devices.items():
+            for device in devices:
                 # Check shutdown flag
                 if shutdown_flag:
                     break
 
-                # Get RSSI from advertisement_data
-                rssi = advertisement_data.rssi
+                # Debug: show all devices with good signal
+                if DEBUG_MODE and device.rssi >= RSSI_THRESHOLD:
+                    print(
+                        f"   📱 Device: {device.name or device.address} | RSSI: {device.rssi} dBm")
+                    if hasattr(device, 'metadata') and device.metadata:
+                        if 'service_data' in device.metadata:
+                            print(
+                                f"      Service Data UUIDs: {list(device.metadata['service_data'].keys())}")
 
                 # Check RSSI threshold (signal strength)
-                if rssi < RSSI_THRESHOLD:
+                if device.rssi < RSSI_THRESHOLD:
                     continue
 
                 # Try to extract user_id from advertisement
-                user_id = extract_user_id(device, advertisement_data)
+                user_id = extract_user_id(device)
 
                 if user_id:
                     detected_now.add(user_id)
@@ -221,7 +249,7 @@ async def scan_ble_devices():
                         print(f"\n🚶 NEW USER DETECTED")
                         print(f"   User ID: {user_id[:8]}...")
                         print(f"   Device: {device.name or 'Unknown'}")
-                        print(f"   RSSI: {rssi} dBm")
+                        print(f"   RSSI: {device.rssi} dBm")
                         print(
                             f"   Time: {datetime.now().strftime('%H:%M:%S')}")
 
@@ -238,7 +266,7 @@ async def scan_ble_devices():
                     else:
                         detected_users[user_id]['last_seen'] = current_time
                         # Optionally print periodic updates
-                        # print(f"👤 User {user_id[:8]}... still in range (RSSI: {rssi} dBm)")
+                        # print(f"👤 User {user_id[:8]}... still in range (RSSI: {device.rssi} dBm)")
 
             # Check for users who have exited (not detected recently)
             users_to_remove = []
@@ -268,10 +296,14 @@ async def scan_ble_devices():
             for user_id in users_to_remove:
                 del detected_users[user_id]
 
-            # Show currently tracked users
+            # Show currently tracked users or heartbeat
+            scan_count += 1
             if detected_users and not shutdown_flag:
                 print(
-                    f"\n📊 Currently tracking {len(detected_users)} user(s)", end='\r')
+                    f"📊 Currently tracking {len(detected_users)} user(s)", end='\r')
+            elif scan_count % 10 == 0:  # Every 10 scans (~20 seconds)
+                print(
+                    f"💚 Scanner active - waiting for devices... ({scan_count} scans)", end='\r')
 
         except Exception as e:
             if not shutdown_flag:
