@@ -6,6 +6,9 @@ Detects Android phone BLE advertisements and manages journey lifecycle
 import asyncio
 import requests
 import time
+import signal
+import sys
+import atexit
 from datetime import datetime
 from bleak import BleakScanner
 
@@ -28,16 +31,22 @@ SCAN_INTERVAL = 2
 # Format: {user_id: {'last_seen': timestamp, 'journey_started': bool}}
 detected_users = {}
 
+# Global flag for graceful shutdown
+shutdown_flag = False
 
-def extract_user_id(device):
+# Store active scanner reference for cleanup
+active_scanner = None
+
+
+def extract_user_id(device, advertisement_data):
     """
     Extract user_id from BLE advertisement data.
-    Looks for service data containing 'RAIL_USER::<user_id>' payload.
+    Looks for service data or manufacturer data containing 'RAIL_USER::<user_id>' payload.
     """
     try:
         # Check service data for our custom UUID
-        if device.metadata and 'service_data' in device.metadata:
-            for uuid, data in device.metadata['service_data'].items():
+        if advertisement_data.service_data:
+            for uuid, data in advertisement_data.service_data.items():
                 try:
                     payload = data.decode('utf-8')
                     if payload.startswith('RAIL_USER::'):
@@ -47,8 +56,8 @@ def extract_user_id(device):
                     pass
 
         # Also check manufacturer data as fallback
-        if device.metadata and 'manufacturer_data' in device.metadata:
-            for manufacturer_id, data in device.metadata['manufacturer_data'].items():
+        if advertisement_data.manufacturer_data:
+            for manufacturer_id, data in advertisement_data.manufacturer_data.items():
                 try:
                     payload = data.decode('utf-8')
                     if 'RAIL_USER::' in payload:
@@ -111,32 +120,98 @@ def end_journey(user_id):
         return False
 
 
+def cleanup_ble():
+    """
+    Emergency cleanup function to stop all BLE activity.
+    Called on exit to ensure no BLE scanning remains active.
+    """
+    global active_scanner, shutdown_flag
+
+    print("\n🧹 Cleaning up BLE resources...")
+
+    shutdown_flag = True
+
+    # If there's an active scanner, try to stop it
+    if active_scanner is not None:
+        try:
+            print("   ⏹️  Stopping BLE scanner...")
+            # BleakScanner cleanup happens automatically when object is destroyed
+            active_scanner = None
+        except Exception as e:
+            print(f"   ⚠️  Error stopping scanner: {e}")
+
+    # End all active journeys gracefully
+    if detected_users:
+        print(f"   📋 Ending {len(detected_users)} active journey(s)...")
+        for user_id, info in list(detected_users.items()):
+            if info.get('journey_started', False):
+                try:
+                    end_journey(user_id)
+                except Exception as e:
+                    print(
+                        f"   ⚠️  Could not end journey for {user_id[:8]}: {e}")
+        detected_users.clear()
+
+    print("   ✅ BLE cleanup complete - Mac Bluetooth is now idle")
+    print("   💡 You can verify with: system_profiler SPBluetoothDataType | grep Power\n")
+
+
+def signal_handler(sig, frame):
+    """
+    Handle termination signals (SIGINT, SIGTERM, SIGQUIT).
+    Ensures cleanup runs before exit.
+    """
+    signal_names = {
+        signal.SIGINT: "SIGINT (Ctrl+C)",
+        signal.SIGTERM: "SIGTERM",
+        signal.SIGQUIT: "SIGQUIT"
+    }
+
+    print(
+        f"\n\n🛑 Received {signal_names.get(sig, 'signal')} - shutting down gracefully...")
+
+    cleanup_ble()
+
+    print("👋 Scanner stopped. Mac Bluetooth restored to normal state.")
+    sys.exit(0)
+
+
 async def scan_ble_devices():
     """
     Continuously scan for BLE devices and detect railway app users.
     """
+    global active_scanner, shutdown_flag
+
     print(f"🔍 Starting BLE scanner...")
     print(f"📡 RSSI threshold: {RSSI_THRESHOLD} dBm")
     print(f"⏱️  Exit delay: {EXIT_DELAY_SECONDS} seconds")
     print(f"🌐 Backend: {BACKEND_URL}")
     print(f"{'='*60}\n")
 
-    while True:
+    while not shutdown_flag:
         try:
-            # Scan for BLE devices
-            devices = await BleakScanner.discover(timeout=SCAN_INTERVAL)
+            # Scan for BLE devices with callback approach
+            devices = await BleakScanner.discover(timeout=SCAN_INTERVAL, return_adv=True)
 
             current_time = time.time()
             detected_now = set()
 
             # Process each detected device
-            for device in devices:
+            # devices is a dict: {address: (BLEDevice, AdvertisementData)}
+            for address, (device, advertisement_data) in devices.items():
+                # Check shutdown flag
+                if shutdown_flag:
+                    break
+
+                # Get RSSI from advertisement_data
+                rssi = advertisement_data.rssi
+
                 # Check RSSI threshold (signal strength)
-                if device.rssi < RSSI_THRESHOLD:
+                if rssi < RSSI_THRESHOLD:
                     continue
 
                 # Try to extract user_id from advertisement
-                user_id = extract_user_id(device)
+                user_id = extract_user_id(device, advertisement_data)
 
                 if user_id:
                     detected_now.add(user_id)
@@ -146,7 +221,7 @@ async def scan_ble_devices():
                         print(f"\n🚶 NEW USER DETECTED")
                         print(f"   User ID: {user_id[:8]}...")
                         print(f"   Device: {device.name or 'Unknown'}")
-                        print(f"   RSSI: {device.rssi} dBm")
+                        print(f"   RSSI: {rssi} dBm")
                         print(
                             f"   Time: {datetime.now().strftime('%H:%M:%S')}")
 
@@ -163,12 +238,15 @@ async def scan_ble_devices():
                     else:
                         detected_users[user_id]['last_seen'] = current_time
                         # Optionally print periodic updates
-                        # print(f"👤 User {user_id[:8]}... still in range (RSSI: {device.rssi} dBm)")
+                        # print(f"👤 User {user_id[:8]}... still in range (RSSI: {rssi} dBm)")
 
             # Check for users who have exited (not detected recently)
             users_to_remove = []
 
             for user_id, info in detected_users.items():
+                if shutdown_flag:
+                    break
+
                 time_since_last_seen = current_time - info['last_seen']
 
                 # User has been gone for EXIT_DELAY_SECONDS
@@ -191,16 +269,18 @@ async def scan_ble_devices():
                 del detected_users[user_id]
 
             # Show currently tracked users
-            if detected_users:
+            if detected_users and not shutdown_flag:
                 print(
                     f"\n📊 Currently tracking {len(detected_users)} user(s)", end='\r')
 
         except Exception as e:
-            print(f"❌ Scan error: {e}")
+            if not shutdown_flag:
+                print(f"❌ Scan error: {e}")
             await asyncio.sleep(1)
 
-        # Small delay before next scan
-        await asyncio.sleep(0.5)
+        # Small delay before next scan (only if not shutting down)
+        if not shutdown_flag:
+            await asyncio.sleep(0.5)
 
 
 def test_backend_connection():
@@ -226,9 +306,22 @@ def main():
     """
     Main entry point - test connection and start scanner.
     """
+    global shutdown_flag
+
     print("\n" + "="*60)
     print("🚂 RAILWAY POC - RASPBERRY PI BLE SCANNER")
     print("="*60 + "\n")
+
+    # Register signal handlers for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)   # Ctrl+C
+    signal.signal(signal.SIGTERM, signal_handler)  # kill command
+    signal.signal(signal.SIGQUIT, signal_handler)  # Ctrl+\
+
+    # Register cleanup function to run on normal exit
+    atexit.register(cleanup_ble)
+
+    print("✅ Cleanup handlers registered (SIGINT, SIGTERM, SIGQUIT, exit)")
+    print("   Press Ctrl+C to stop gracefully\n")
 
     # Test backend connection first
     if not test_backend_connection():
@@ -241,10 +334,16 @@ def main():
         # Run async scanner
         asyncio.run(scan_ble_devices())
     except KeyboardInterrupt:
-        print("\n\n🛑 Scanner stopped by user")
-        print(f"Final tracked users: {len(detected_users)}")
+        # Signal handler will take care of cleanup
+        pass
     except Exception as e:
         print(f"\n❌ Fatal error: {e}")
+        cleanup_ble()
+    finally:
+        if not shutdown_flag:
+            print("\n\n🛑 Scanner stopped")
+            print(f"Final tracked users: {len(detected_users)}")
+            cleanup_ble()
 
 
 if __name__ == "__main__":
