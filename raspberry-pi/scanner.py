@@ -18,7 +18,7 @@ BACKEND_URL = "http://192.168.31.187:8000"
 # RSSI threshold for proximity detection (in dBm)
 # -70 dBm = close proximity (~2-3 meters, inside train)
 # -80 dBm = wider range (~5-6 meters)
-RSSI_THRESHOLD = -70
+RSSI_THRESHOLD = -80
 
 # Exit detection delay (seconds)
 # User is considered "exited" only if not detected for this duration
@@ -249,13 +249,16 @@ async def scan_ble_devices():
                 # Get RSSI from advertisement_data
                 rssi = advertisement_data.rssi
 
-                # Debug: show all devices with good signal
-                if DEBUG_MODE and rssi >= RSSI_THRESHOLD:
+                # Debug: show ALL devices with their RSSI (even if below threshold)
+                if DEBUG_MODE:
+                    status = "✅" if rssi >= RSSI_THRESHOLD else "⚠️"
                     print(
-                        f"   📱 Device: {device.name or device.address} | RSSI: {rssi} dBm")
+                        f"   {status} Device: {device.name or device.address} | RSSI: {rssi} dBm")
                     if advertisement_data.service_data:
                         print(
                             f"      Service Data UUIDs: {list(advertisement_data.service_data.keys())}")
+                    else:
+                        print(f"      No service_data")
 
                 # Check RSSI threshold (signal strength)
                 if rssi < RSSI_THRESHOLD:
