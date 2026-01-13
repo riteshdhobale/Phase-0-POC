@@ -52,17 +52,28 @@ def journey_start(user_id: str):
     """
     Start a new journey when Raspberry Pi detects BLE proximity.
     Creates ACTIVE journey record.
+    Supports partial user_id matching (first 8 chars from BLE).
     """
     db = SessionLocal()
     try:
-        # Check if user exists
+        # First try exact match
         user = db.query(User).filter(User.user_id == user_id).first()
+
+        # If not found, try partial match (BLE sends truncated ID)
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            user = db.query(User).filter(
+                User.user_id.like(f"{user_id}%")).first()
+
+        if not user:
+            raise HTTPException(
+                status_code=404, detail=f"User not found: {user_id}")
+
+        # Use the full user_id from database
+        full_user_id = user.user_id
 
         # Check if user already has an active journey
         active_journey = db.query(Journey).filter(
-            Journey.user_id == user_id,
+            Journey.user_id == full_user_id,
             Journey.status == "ACTIVE"
         ).first()
 
@@ -77,7 +88,7 @@ def journey_start(user_id: str):
         journey_id = str(uuid.uuid4())
         new_journey = Journey(
             journey_id=journey_id,
-            user_id=user_id,
+            user_id=full_user_id,
             status="ACTIVE"
         )
         db.add(new_journey)
@@ -98,12 +109,28 @@ def journey_end(user_id: str):
     """
     End journey when Raspberry Pi detects BLE exit (out of range).
     Deducts ₹20 fare from wallet and logs transaction.
+    Supports partial user_id matching (first 8 chars from BLE).
     """
     db = SessionLocal()
     try:
+        # First try exact match for user
+        user = db.query(User).filter(User.user_id == user_id).first()
+
+        # If not found, try partial match (BLE sends truncated ID)
+        if not user:
+            user = db.query(User).filter(
+                User.user_id.like(f"{user_id}%")).first()
+
+        if not user:
+            raise HTTPException(
+                status_code=404, detail=f"User not found: {user_id}")
+
+        # Use the full user_id from database
+        full_user_id = user.user_id
+
         # Find active journey for this user
         active_journey = db.query(Journey).filter(
-            Journey.user_id == user_id,
+            Journey.user_id == full_user_id,
             Journey.status == "ACTIVE"
         ).first()
 
@@ -111,8 +138,6 @@ def journey_end(user_id: str):
             raise HTTPException(
                 status_code=404, detail="No active journey found")
 
-        # Get user and deduct fare
-        user = db.query(User).filter(User.user_id == user_id).first()
         fare_amount = 20.0
 
         # Deduct fare (allow negative balance for POC - in production would check minimum)
@@ -124,7 +149,7 @@ def journey_end(user_id: str):
 
         # Log fare deduction
         fare_log = FareLog(
-            user_id=user_id,
+            user_id=full_user_id,
             journey_id=active_journey.journey_id,
             amount=fare_amount,
             description="Auto fare deduction on journey end"
