@@ -18,7 +18,7 @@ BACKEND_URL = "http://192.168.31.187:8000"
 # RSSI threshold for proximity detection (in dBm)
 # -70 dBm = close proximity (~2-3 meters, inside train)
 # -80 dBm = wider range (~5-6 meters)
-RSSI_THRESHOLD = -80
+RSSI_THRESHOLD = -95
 
 # Exit detection delay (seconds)
 # User is considered "exited" only if not detected for this duration
@@ -44,17 +44,16 @@ active_scanner = None
 def extract_user_id(device, advertisement_data):
     """
     Extract user_id from BLE advertisement data.
-    Checks manufacturer_data FIRST (Android compatibility), then service_data.
+    Checks ALL manufacturer_data and ALL service_data for RAIL_USER:: pattern.
     """
     if DEBUG_MODE:
         print(f"🔍 Checking device: {device.address}")
 
     try:
-        # CHECK MANUFACTURER DATA FIRST (better Android compatibility)
+        # CHECK ALL MANUFACTURER DATA for RAIL_USER::
         if advertisement_data.manufacturer_data:
             if DEBUG_MODE:
-                print(
-                    f"   📦 Manufacturer data found: {list(advertisement_data.manufacturer_data.keys())}")
+                print(f"   📦 Manufacturer data found: {list(advertisement_data.manufacturer_data.keys())}")
 
             for manufacturer_id, data in advertisement_data.manufacturer_data.items():
                 try:
@@ -62,32 +61,32 @@ def extract_user_id(device, advertisement_data):
                         print(f"   🏭 Manufacturer ID: {hex(manufacturer_id)}")
                         print(f"   📦 Raw data: {data}")
 
+                    # Try decoding as UTF-8
                     payload = data.decode('utf-8', errors='ignore')
 
                     if DEBUG_MODE:
                         print(f"   📝 Decoded: {payload}")
 
+                    # Check for RAIL_USER:: anywhere in payload
                     if 'RAIL_USER::' in payload:
                         user_id = payload.split('RAIL_USER::')[1].strip()
-
-                        if DEBUG_MODE:
-                            print(
-                                f"   ✅ Found user in manufacturer_data: {user_id[:8]}...")
-
+                        # Clean up any trailing garbage
+                        if '\x00' in user_id:
+                            user_id = user_id.split('\x00')[0]
+                        print(f"   ✅ Found user in manufacturer_data (ID {hex(manufacturer_id)}): {user_id[:8]}...")
                         return user_id
+                        
                 except Exception as e:
                     if DEBUG_MODE:
-                        print(
-                            f"   ⚠️  Could not decode manufacturer_data: {e}")
+                        print(f"   ⚠️  Could not decode manufacturer_data: {e}")
         else:
             if DEBUG_MODE:
                 print(f"   ⚠️  No manufacturer_data found")
 
-        # Check service_data as fallback
+        # CHECK ALL SERVICE DATA for RAIL_USER::
         if advertisement_data.service_data:
             if DEBUG_MODE:
-                print(
-                    f"   🔑 Service data found: {list(advertisement_data.service_data.keys())}")
+                print(f"   🔑 Service data found: {list(advertisement_data.service_data.keys())}")
 
             for uuid, data in advertisement_data.service_data.items():
                 try:
@@ -95,25 +94,34 @@ def extract_user_id(device, advertisement_data):
                         print(f"   🔑 Service UUID: {uuid}")
                         print(f"   📦 Raw data: {data}")
 
+                    # Try decoding as UTF-8
                     payload = data.decode('utf-8', errors='ignore')
 
                     if DEBUG_MODE:
                         print(f"   📝 Decoded: {payload}")
 
-                    if payload.startswith('RAIL_USER::'):
-                        user_id = payload.replace('RAIL_USER::', '').strip()
-
-                        if DEBUG_MODE:
-                            print(
-                                f"   ✅ Found user in service_data: {user_id[:8]}...")
-
+                    # Check for RAIL_USER:: anywhere in payload
+                    if 'RAIL_USER::' in payload:
+                        user_id = payload.split('RAIL_USER::')[1].strip()
+                        # Clean up any trailing garbage
+                        if '\x00' in user_id:
+                            user_id = user_id.split('\x00')[0]
+                        print(f"   ✅ Found user in service_data (UUID {uuid}): {user_id[:8]}...")
                         return user_id
+                        
                 except Exception as e:
                     if DEBUG_MODE:
                         print(f"   ⚠️  Could not decode service_data: {e}")
         else:
             if DEBUG_MODE:
                 print(f"   ⚠️  No service_data found")
+                
+        # ALSO CHECK LOCAL NAME for RAIL_USER:: (some phones put it there)
+        if advertisement_data.local_name:
+            if 'RAIL_USER::' in advertisement_data.local_name:
+                user_id = advertisement_data.local_name.split('RAIL_USER::')[1].strip()
+                print(f"   ✅ Found user in local_name: {user_id[:8]}...")
+                return user_id
 
     except Exception as e:
         if DEBUG_MODE:
