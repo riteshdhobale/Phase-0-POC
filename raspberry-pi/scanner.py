@@ -44,13 +44,13 @@ active_scanner = None
 def extract_user_id(device, advertisement_data):
     """
     Extract user_id from BLE advertisement data.
-    Checks ALL manufacturer_data and ALL service_data for RAIL_USER:: pattern.
+    Checks ALL manufacturer_data and ALL service_data for RAIL:: or RAIL_USER:: pattern.
     """
     if DEBUG_MODE:
         print(f"🔍 Checking device: {device.address}")
 
     try:
-        # CHECK ALL MANUFACTURER DATA for RAIL_USER::
+        # CHECK ALL MANUFACTURER DATA
         if advertisement_data.manufacturer_data:
             if DEBUG_MODE:
                 print(f"   📦 Manufacturer data found: {list(advertisement_data.manufacturer_data.keys())}")
@@ -59,7 +59,7 @@ def extract_user_id(device, advertisement_data):
                 try:
                     if DEBUG_MODE:
                         print(f"   🏭 Manufacturer ID: {hex(manufacturer_id)}")
-                        print(f"   📦 Raw data: {data}")
+                        print(f"   📦 Raw data ({len(data)} bytes): {data}")
 
                     # Try decoding as UTF-8
                     payload = data.decode('utf-8', errors='ignore')
@@ -67,15 +67,22 @@ def extract_user_id(device, advertisement_data):
                     if DEBUG_MODE:
                         print(f"   📝 Decoded: {payload}")
 
-                    # Check for RAIL_USER:: anywhere in payload
-                    if 'RAIL_USER::' in payload:
-                        user_id = payload.split('RAIL_USER::')[1].strip()
-                        # Clean up any trailing garbage
+                    # Check for SHORT format: RAIL::xxxxxxxx (14 bytes)
+                    if 'RAIL::' in payload:
+                        user_id = payload.split('RAIL::')[1].strip()
                         if '\x00' in user_id:
                             user_id = user_id.split('\x00')[0]
-                        print(f"   ✅ Found user in manufacturer_data (ID {hex(manufacturer_id)}): {user_id[:8]}...")
+                        print(f"   ✅ Found user (short): {user_id}")
                         return user_id
-                        
+                    
+                    # Check for LONG format: RAIL_USER::uuid (for backwards compat)
+                    if 'RAIL_USER::' in payload:
+                        user_id = payload.split('RAIL_USER::')[1].strip()
+                        if '\x00' in user_id:
+                            user_id = user_id.split('\x00')[0]
+                        print(f"   ✅ Found user (long): {user_id[:8]}...")
+                        return user_id
+
                 except Exception as e:
                     if DEBUG_MODE:
                         print(f"   ⚠️  Could not decode manufacturer_data: {e}")
@@ -83,7 +90,7 @@ def extract_user_id(device, advertisement_data):
             if DEBUG_MODE:
                 print(f"   ⚠️  No manufacturer_data found")
 
-        # CHECK ALL SERVICE DATA for RAIL_USER::
+        # CHECK ALL SERVICE DATA
         if advertisement_data.service_data:
             if DEBUG_MODE:
                 print(f"   🔑 Service data found: {list(advertisement_data.service_data.keys())}")
@@ -92,32 +99,42 @@ def extract_user_id(device, advertisement_data):
                 try:
                     if DEBUG_MODE:
                         print(f"   🔑 Service UUID: {uuid}")
-                        print(f"   📦 Raw data: {data}")
+                        print(f"   📦 Raw data ({len(data)} bytes): {data}")
 
-                    # Try decoding as UTF-8
                     payload = data.decode('utf-8', errors='ignore')
 
                     if DEBUG_MODE:
                         print(f"   📝 Decoded: {payload}")
 
-                    # Check for RAIL_USER:: anywhere in payload
-                    if 'RAIL_USER::' in payload:
-                        user_id = payload.split('RAIL_USER::')[1].strip()
-                        # Clean up any trailing garbage
+                    # Check for SHORT format
+                    if 'RAIL::' in payload:
+                        user_id = payload.split('RAIL::')[1].strip()
                         if '\x00' in user_id:
                             user_id = user_id.split('\x00')[0]
-                        print(f"   ✅ Found user in service_data (UUID {uuid}): {user_id[:8]}...")
+                        print(f"   ✅ Found user (short): {user_id}")
                         return user_id
                         
+                    # Check for LONG format
+                    if 'RAIL_USER::' in payload:
+                        user_id = payload.split('RAIL_USER::')[1].strip()
+                        if '\x00' in user_id:
+                            user_id = user_id.split('\x00')[0]
+                        print(f"   ✅ Found user (long): {user_id[:8]}...")
+                        return user_id
+
                 except Exception as e:
                     if DEBUG_MODE:
                         print(f"   ⚠️  Could not decode service_data: {e}")
         else:
             if DEBUG_MODE:
                 print(f"   ⚠️  No service_data found")
-                
-        # ALSO CHECK LOCAL NAME for RAIL_USER:: (some phones put it there)
+
+        # ALSO CHECK LOCAL NAME
         if advertisement_data.local_name:
+            if 'RAIL::' in advertisement_data.local_name:
+                user_id = advertisement_data.local_name.split('RAIL::')[1].strip()
+                print(f"   ✅ Found user in local_name: {user_id}")
+                return user_id
             if 'RAIL_USER::' in advertisement_data.local_name:
                 user_id = advertisement_data.local_name.split('RAIL_USER::')[1].strip()
                 print(f"   ✅ Found user in local_name: {user_id[:8]}...")
