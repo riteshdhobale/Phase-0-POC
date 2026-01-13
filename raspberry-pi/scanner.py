@@ -64,12 +64,14 @@ def extract_user_id(device, advertisement_data):
                 try:
                     # Highlight if this is OUR phone's manufacturer ID
                     is_our_phone = (manufacturer_id == TARGET_MANUFACTURER_ID)
-                    
+
                     if DEBUG_MODE:
                         if is_our_phone:
-                            print(f"   🎯 *** YOUR PHONE DETECTED! *** Manufacturer ID: {hex(manufacturer_id)}")
+                            print(
+                                f"   🎯 *** YOUR PHONE DETECTED! *** Manufacturer ID: {hex(manufacturer_id)}")
                         else:
-                            print(f"   🏭 Manufacturer ID: {hex(manufacturer_id)} (not our phone)")
+                            print(
+                                f"   🏭 Manufacturer ID: {hex(manufacturer_id)} (not our phone)")
                         print(f"   📦 Raw data ({len(data)} bytes): {data}")
 
                     # Try decoding as UTF-8
