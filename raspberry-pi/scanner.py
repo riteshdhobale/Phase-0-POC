@@ -20,7 +20,7 @@ BACKEND_URL = "http://192.168.31.187:8000"
 # -60 dBm = close proximity (~2-3 meters)
 # -70 dBm = medium range (~3-5 meters)
 # -80 dBm = far range (~5-8 meters)
-RSSI_THRESHOLD = -65  # Only detect when phone is within ~2-3 meters
+RSSI_THRESHOLD = -55  # Only detect when phone is VERY close (~1-2 meters)
 
 # Exit detection delay (seconds)
 # User is considered "exited" only if not detected for this duration
